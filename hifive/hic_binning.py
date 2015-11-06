@@ -179,10 +179,12 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
             num_bins = (stop - start) / binsize
         # find binbounds
         binbounds = numpy.zeros((num_bins, 2), dtype=numpy.int32) - 1
-        for i, j in enumerate(mapping):
-            if binbounds[j, 0] == -1:
-                binbounds[j, 0] = mids[i]
-            binbounds[j, 1] = mids[i] + 1
+        binbounds[:, 0] = numpy.arange(num_bins) * binsize + start
+        binbounds[:, 1] = numpy.arange(1, num_bins + 1) * binsize + start
+        #for i, j in enumerate(mapping):
+        #    if binbounds[j, 0] == -1:
+        #        binbounds[j, 0] = mids[i]
+        #    binbounds[j, 1] = mids[i] + 1
     # if correction is requested, determine the appropriate type
     distance_parameters = None
     chrom_mean = 0.0
@@ -210,7 +212,7 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
             corrections = numpy.zeros(stopfend - startfend, dtype=numpy.float32)
             corrections[valid] = hic.corrections[startfend:stopfend][valid]
             # if only fend corrections are requested, we can use a shortcut for finding expected values
-            if (binsize > 0 and maxdistance == 0 and datatype == 'fends' and
+            if (binsize > 0 and maxdistance == 0 and datatype == 'fend' and
                 hic.normalization in ['express', 'probability'] and
                 not proportional):
                 correction_sums = numpy.bincount(mapping[valid], weights=corrections[valid],
@@ -314,6 +316,15 @@ def find_cis_signal(hic, chrom, binsize=10000, binbounds=None, start=None, stop=
         if not silent:
             print >> sys.stderr, ("Done\n"),
         return data_array
+
+def _compact_to_upper(array):
+    n, m = array.shape[0], array.shape[1]
+    new_array = numpy.zeros((n * (n - 1) / 2, 2), dtype=numpy.float32)
+    for i in range(n - 1):
+        stop = min(m, n - i - 1)
+        start = i * n - i * (i + 1) / 2
+        new_array[start:(start + stop), :] = array[i, :stop, :]
+    return new_array
 
 def find_cis_signal2(hic, chrom, binsize=10000, binbounds=None, start=None, stop=None, startfend=None, stopfend=None,
                     datatype='enrichment', arraytype='compact', maxdistance=0, skipfiltered=False, returnmapping=False,
@@ -1389,7 +1400,7 @@ def write_heatmap_dict(hic, filename, binsize, includetrans=True, datatype='enri
             if not dynamically_binned:
                 heatmaps[chrom] = find_cis_signal(hic, chrom[0], binsize=binsize, datatype=datatype,
                                                   arraytype='upper', returnmapping=True, silent=silent,
-                                                  skipfiltered=True, includediagonal=True)
+                                                  skipfiltered=True, includediagonal=False)
             else:
                 temp = find_cis_signal(hic, chrom[0], binsize=expansion_binsize, datatype=datatype, arraytype='upper',
                                        returnmapping=True, silent=silent)
@@ -1605,12 +1616,16 @@ def find_multiresolution_heatmap(hic, chrom, start, stop, chrom2=None, start2=No
                         startfend2,
                         stopfend2 - startfend2,
                         1)
+            data[:num_data, :] = data[numpy.lexsort((data[:num_data, 1], data[:num_data, 0])), :]
         else:
             start_index = hic.data['trans_indices'][startfend]
             stop_index = hic.data['trans_indices'][stopfend]
             data = hic.data['trans_data'][start_index:stop_index, :]
+            data = data[numpy.where((data[:, 1] >= startfend2) * (data[:, 1] < stopfend2))[0], :]
             data_indices = hic.data['trans_indices'][startfend:(stopfend + 1)]
             data_indices -= data_indices[0]
+            for i in range(1, data_indices.shape[0]):
+                data_indices[i] += data_indices[i - 1]
             num_data = _hic_binning.remap_mrh_data(
                         data,
                         data_indices,
@@ -1638,8 +1653,6 @@ def find_multiresolution_heatmap(hic, chrom, start, stop, chrom2=None, start2=No
                     startfend,
                     stopfend - startfend,
                     0)
-    if trans and chrint2 < chrint:
-        data = data[numpy.lexsort((data[:, 1], data[:, 0])), :]
     data_indices = numpy.r_[0, numpy.bincount(data[:num_data, 0], minlength=valid.shape[0])].astype(numpy.int64)
     for i in range(1, data_indices.shape[0]):
         data_indices[i] += data_indices[i - 1]

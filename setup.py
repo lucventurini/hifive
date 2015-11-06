@@ -18,7 +18,7 @@ from distutils.extension import Extension
 
 MAJOR = 1
 MINOR = 2
-PATCH = None
+PATCH = 1
 ISRELEASED = True
 VERSION = '%d.%d' % (MAJOR, MINOR)
 if not PATCH is None:
@@ -170,6 +170,10 @@ def get_extension_modules(include_dirs):
                                 extra_compile_args=[]))
     extensions.append(Extension("hifive.libraries._fivec_optimize", ["hifive/libraries/_fivec_optimize.pyx",
                                 "hifive/libraries/_normal.cpp"],
+                                include_dirs=include_dirs, language="c++",
+                                extra_compile_args=[]))
+    # TAD functions
+    extensions.append(Extension("hifive.libraries._hic_tads", ["hifive/libraries/_hic_tads.pyx"],
                                 include_dirs=include_dirs, language="c++",
                                 extra_compile_args=[]))
     # Modeling functions
